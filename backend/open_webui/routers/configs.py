@@ -18,6 +18,8 @@ from open_webui.utils.tools import (
 )
 from open_webui.utils.mcp.client import MCPClient
 from open_webui.models.oauth_sessions import OAuthSessions
+from open_webui.utils.af_config import AF_APP_ID, AF_APP_SECRET, AF_GATEWAY_URL
+from af_sdk import MCPClient as AFMCPClient
 
 
 from open_webui.utils.oauth import (
@@ -262,6 +264,44 @@ async def verify_tool_servers_config(
                     status_code=400,
                     detail=f"Failed to fetch OAuth 2.1 discovery document from {discovery_urls}",
                 )
+            elif form_data.auth_type == "agentic_fabriq":
+                try:
+                    oauth_session = OAuthSessions.get_session_by_provider_and_user_id("okta", user.id)
+                    if not oauth_session:
+                        oauth_session = OAuthSessions.get_session_by_provider_and_user_id("oidc", user.id)
+
+                    if not oauth_session or not oauth_session.token.get("access_token"):
+                        raise HTTPException(status_code=400, detail="No OIDC session found. Please log in with SSO first.")
+
+                    keycloak_token = oauth_session.token.get("access_token")
+
+                    af_client = AFMCPClient(
+                        method="keycloak",
+                        app_id=AF_APP_ID,
+                        app_secret=AF_APP_SECRET,
+                        keycloak_token=keycloak_token,
+                        mcp_url=f"{AF_GATEWAY_URL}/mcp",
+                        gateway_url=AF_GATEWAY_URL,
+                    )
+                    await af_client.connect()
+
+                    tools = await af_client.list_tools()
+                    specs = [
+                        {
+                            "name": tool["name"],
+                            "description": tool.get("description", ""),
+                            "parameters": tool.get("input_schema", tool.get("inputSchema", {})),
+                        }
+                        for tool in tools
+                    ]
+
+                    await af_client.disconnect()
+                    return {"status": True, "specs": specs}
+                except HTTPException:
+                    raise
+                except Exception as e:
+                    log.error(f"Error connecting to Agentic Fabriq MCP: {e}")
+                    raise HTTPException(status_code=400, detail=f"Failed to authenticate with Agentic Fabriq: {str(e)}")
             else:
                 try:
                     client = MCPClient()

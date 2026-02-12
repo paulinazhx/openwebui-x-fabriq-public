@@ -656,6 +656,7 @@
 												<option value="system_oauth">{$i18n.t('OAuth')}</option>
 												{#if type === 'mcp'}
 													<option value="oauth_2.1">{$i18n.t('OAuth 2.1')}</option>
+													<option value="agentic_fabriq">{$i18n.t('Agentic Fabriq')}</option>
 												{/if}
 											{/if}
 										</select>
@@ -691,6 +692,12 @@
 												class={`flex items-center text-xs self-center translate-y-[1px] ${($settings?.highContrastMode ?? false) ? 'text-gray-800 dark:text-gray-100' : 'text-gray-500'}`}
 											>
 												{$i18n.t('Uses OAuth 2.1 Dynamic Client Registration')}
+											</div>
+										{:else if auth_type === 'agentic_fabriq'}
+											<div
+												class={`flex items-center text-xs self-center translate-y-[1px] ${($settings?.highContrastMode ?? false) ? 'text-gray-800 dark:text-gray-100' : 'text-gray-500'}`}
+											>
+												{$i18n.t('Exchanges Keycloak token for Agentic Fabriq access')}
 											</div>
 										{/if}
 									</div>

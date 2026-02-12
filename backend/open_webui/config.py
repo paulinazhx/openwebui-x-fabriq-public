@@ -115,6 +115,7 @@ if os.path.exists(f"{DATA_DIR}/config.json"):
 DEFAULT_CONFIG = {
     "version": 0,
     "ui": {},
+    "auth": {"enable_signup": True},
 }
 
 
@@ -446,13 +447,13 @@ GITHUB_CLIENT_REDIRECT_URI = PersistentConfig(
 OAUTH_CLIENT_ID = PersistentConfig(
     "OAUTH_CLIENT_ID",
     "oauth.oidc.client_id",
-    os.environ.get("OAUTH_CLIENT_ID", ""),
+    os.environ.get("OAUTH_CLIENT_ID", os.environ.get("AF_APP_ID", "")),
 )
 
 OAUTH_CLIENT_SECRET = PersistentConfig(
     "OAUTH_CLIENT_SECRET",
     "oauth.oidc.client_secret",
-    os.environ.get("OAUTH_CLIENT_SECRET", ""),
+    os.environ.get("OAUTH_CLIENT_SECRET", os.environ.get("AF_APP_SECRET", "")),
 )
 
 OPENID_PROVIDER_URL = PersistentConfig(
@@ -759,10 +760,10 @@ def load_oauth_providers():
             client = oauth.register(
                 name="oidc",
                 client_id=OAUTH_CLIENT_ID.value,
-                client_secret=OAUTH_CLIENT_SECRET.value,
+                client_secret=OAUTH_CLIENT_SECRET.value if OAUTH_CLIENT_SECRET.value else None,
                 server_metadata_url=OPENID_PROVIDER_URL.value,
                 client_kwargs=client_kwargs,
-                redirect_uri=OPENID_REDIRECT_URI.value,
+                # DO NOT set redirect_uri here -- Keycloak validates it dynamically
             )
             return client
 

@@ -35,6 +35,11 @@ try:
     from dotenv import find_dotenv, load_dotenv
 
     load_dotenv(find_dotenv(str(BASE_DIR / ".env")))
+
+    # Also load .oidc file if it exists (for OIDC/OAuth configuration)
+    oidc_file = BACKEND_DIR / ".oidc"
+    if oidc_file.exists():
+        load_dotenv(oidc_file)
 except ImportError:
     print("dotenv not installed, skipping...")
 

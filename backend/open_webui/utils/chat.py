@@ -250,18 +250,17 @@ async def generate_chat_completion(
                     background=response.background,
                 )
             else:
-                return {
-                    **(
-                        await generate_chat_completion(
-                            request,
-                            form_data,
-                            user,
-                            bypass_filter=True,
-                            bypass_system_prompt=bypass_system_prompt,
-                        )
-                    ),
-                    "selected_model_id": selected_model_id,
-                }
+                result = await generate_chat_completion(
+                    request,
+                    form_data,
+                    user,
+                    bypass_filter=True,
+                    bypass_system_prompt=bypass_system_prompt,
+                )
+                if isinstance(result, dict):
+                    return {**result, "selected_model_id": selected_model_id}
+                else:
+                    return result  # JSONResponse error -- return as-is
 
         if model.get("pipe"):
             # Below does not require bypass_filter because this is the only route the uses this function and it is already bypassing the filter

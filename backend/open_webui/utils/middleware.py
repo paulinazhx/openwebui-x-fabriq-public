@@ -106,6 +106,8 @@ from open_webui.utils.filter import (
 from open_webui.utils.code_interpreter import execute_code_jupyter
 from open_webui.utils.payload import apply_system_prompt_to_body
 from open_webui.utils.mcp.client import MCPClient
+from open_webui.utils.af_config import AF_APP_ID, AF_APP_SECRET, AF_GATEWAY_URL
+from af_sdk import MCPClient as AFMCPClient
 
 
 from open_webui.config import (
@@ -1715,11 +1717,52 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                         for key, value in connection_headers.items():
                             headers[key] = value
 
-                    mcp_clients[server_id] = MCPClient()
-                    await mcp_clients[server_id].connect(
-                        url=mcp_server_connection.get("url", ""),
-                        headers=headers if headers else None,
-                    )
+                    tool_specs = []
+                    is_af_client = auth_type == "agentic_fabriq"
+
+                    if auth_type == "agentic_fabriq":
+                        try:
+                            oauth_session = OAuthSessions.get_session_by_provider_and_user_id("okta", user.id)
+                            if not oauth_session:
+                                oauth_session = OAuthSessions.get_session_by_provider_and_user_id("oidc", user.id)
+
+                            if oauth_session and oauth_session.token.get("access_token"):
+                                keycloak_token = oauth_session.token.get("access_token")
+
+                                af_mcp_client = AFMCPClient(
+                                    method="keycloak",
+                                    app_id=AF_APP_ID,
+                                    app_secret=AF_APP_SECRET,
+                                    keycloak_token=keycloak_token,
+                                    mcp_url=f"{AF_GATEWAY_URL}/mcp",
+                                    gateway_url=AF_GATEWAY_URL,
+                                )
+                                await af_mcp_client.connect()
+
+                                mcp_clients[server_id] = af_mcp_client
+
+                                tools = await af_mcp_client.list_tools()
+                                tool_specs = [
+                                    {
+                                        "name": tool["name"],
+                                        "description": tool.get("description", ""),
+                                        "parameters": tool.get("input_schema", tool.get("inputSchema", {})),
+                                    }
+                                    for tool in tools
+                                ]
+                            else:
+                                log.error(f"No OIDC/Okta session with access_token found for user {user.id}")
+                                continue
+                        except Exception as e:
+                            log.error(f"Error connecting to Agentic Fabriq MCP: {e}", exc_info=True)
+                            raise e
+                    else:
+                        mcp_clients[server_id] = MCPClient()
+                        await mcp_clients[server_id].connect(
+                            url=mcp_server_connection.get("url", ""),
+                            headers=headers if headers else None,
+                        )
+                        tool_specs = await mcp_clients[server_id].list_tool_specs()
 
                     function_name_filter_list = mcp_server_connection.get(
                         "config", {}
@@ -1728,15 +1771,17 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                     if isinstance(function_name_filter_list, str):
                         function_name_filter_list = function_name_filter_list.split(",")
 
-                    tool_specs = await mcp_clients[server_id].list_tool_specs()
                     for tool_spec in tool_specs:
 
-                        def make_tool_function(client, function_name):
+                        def make_tool_function(client, function_name, is_af_client):
                             async def tool_function(**kwargs):
-                                return await client.call_tool(
-                                    function_name,
-                                    function_args=kwargs,
-                                )
+                                if is_af_client:
+                                    return await client.call_tool(function_name, kwargs)
+                                else:
+                                    return await client.call_tool(
+                                        function_name,
+                                        function_args=kwargs,
+                                    )
 
                             return tool_function
 
@@ -1748,7 +1793,7 @@ async def process_chat_payload(request, form_data, user, metadata, model):
                                 continue
 
                         tool_function = make_tool_function(
-                            mcp_clients[server_id], tool_spec["name"]
+                            mcp_clients[server_id], tool_spec["name"], is_af_client
                         )
 
                         mcp_tools_dict[f"{server_id}_{tool_spec['name']}"] = {
@@ -2765,6 +2810,14 @@ async def process_chat_response(
                     nonlocal content
                     nonlocal content_blocks
 
+                    if not hasattr(response, "body_iterator"):
+                        if isinstance(response, JSONResponse):
+                            log.error(f"Received JSONResponse instead of StreamingResponse: {response.body}")
+                            return
+                        else:
+                            log.error(f"Response has no body_iterator: {type(response)}")
+                            return
+
                     response_tool_calls = []
 
                     delta_count = 0
@@ -3705,6 +3758,14 @@ async def process_chat_response(
 
                 if data:
                     yield data
+
+        if not hasattr(response, "body_iterator"):
+            if isinstance(response, JSONResponse):
+                log.error(f"Received JSONResponse instead of StreamingResponse: {response.body}")
+                return response
+            else:
+                log.error(f"Response has no body_iterator: {type(response)}")
+                return response
 
         return StreamingResponse(
             stream_wrapper(response.body_iterator, events),

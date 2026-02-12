@@ -1128,6 +1128,11 @@ class OAuthManager:
             log.debug("Assigning the first user the admin role")
             return "admin"
 
+        # If an existing user is still "pending", promote to default role on OIDC login
+        if user and user.role == "pending":
+            log.debug("User role is pending; promoting to default user role")
+            return auth_manager_config.DEFAULT_USER_ROLE
+
         if auth_manager_config.ENABLE_OAUTH_ROLE_MANAGEMENT:
             log.debug("Running OAUTH Role management")
             oauth_claim = auth_manager_config.OAUTH_ROLES_CLAIM
@@ -1389,6 +1394,7 @@ class OAuthManager:
         redirect_uri = OAUTH_PROVIDERS[provider].get("redirect_uri") or request.url_for(
             "oauth_login_callback", provider=provider
         )
+        log.info(f"OAuth login for provider {provider} using redirect_uri: {redirect_uri}")
         client = self.get_client(provider)
         if client is None:
             raise HTTPException(404)
@@ -1397,7 +1403,14 @@ class OAuthManager:
         if auth_manager_config.OAUTH_AUDIENCE:
             kwargs["audience"] = auth_manager_config.OAUTH_AUDIENCE
 
-        return await client.authorize_redirect(request, redirect_uri, **kwargs)
+        try:
+            resp = await client.authorize_redirect(request, redirect_uri, **kwargs)
+            if resp.headers.get("location"):
+                log.info(f"Auth redirect location: {resp.headers['location']}")
+            return resp
+        except Exception as e:
+            log.error(f"Error in authorize_redirect for provider {provider}: {e}", exc_info=True)
+            raise
 
     async def handle_callback(self, request, provider, response, db=None):
         if provider not in OAUTH_PROVIDERS:
