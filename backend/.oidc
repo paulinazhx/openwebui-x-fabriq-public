@@ -1,0 +1,29 @@
+# --- OIDC Core Settings ---
+# Keycloak OIDC Configuration for OpenWebUI
+
+ENABLE_OAUTH_SIGNUP="true"
+OAUTH_MERGE_ACCOUNTS_BY_EMAIL="true"
+
+# Agentic Fabriq application credentials
+# Also used as OAUTH_CLIENT_ID / OAUTH_CLIENT_SECRET for Keycloak OIDC
+AF_APP_ID=<YOUR_AGENTS_CLIENT_ID>
+AF_APP_SECRET=<YOUR_AGENTS_CLIENT_SECRET>
+
+# Keycloak OIDC Discovery URL
+# Format if an org: https://auth.agenticfabriq.com/realms/<realm>/.well-known/openid-configuration
+# Format if solo user: https://auth.agenticfabriq.com/realms/agentic-fabric/.well-known/openid-configuration
+OPENID_PROVIDER_URL="https://auth.agenticfabriq.com/realms/agentic-fabric/.well-known/openid-configuration"
+
+OAUTH_PROVIDER_NAME="Keycloak"
+
+# Redirect URI -- must match what's configured in Keycloak client settings
+OPENID_REDIRECT_URI="http://localhost:8080/oauth/oidc/login/callback"
+
+OAUTH_SCOPES="openid profile email"
+
+# Enable PKCE (recommended)
+OAUTH_CODE_CHALLENGE_METHOD="S256"
+
+OAUTH_TOKEN_ENDPOINT_AUTH_METHOD="client_secret_basic"
+
+DEFAULT_USER_ROLE="admin"
